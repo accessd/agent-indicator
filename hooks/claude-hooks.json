@@ -1,0 +1,36 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${AGENT_INDICATOR_DIR:-$HOME/.local/share/agent-indicator}\"/agent-state.sh --state running"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${AGENT_INDICATOR_DIR:-$HOME/.local/share/agent-indicator}\"/agent-state.sh --state needs-input"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${AGENT_INDICATOR_DIR:-$HOME/.local/share/agent-indicator}\"/agent-state.sh --state done"
+          }
+        ]
+      }
+    ]
+  }
+}
