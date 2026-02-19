@@ -1,0 +1,17 @@
+{
+  "cesp_version": "1.0",
+  "name": "Default",
+  "description": "Built-in notification sounds using system audio",
+  "sounds": {
+    "needs-input": [
+      { "system": "Funk" },
+      { "system": "Ping" },
+      { "system": "Tink" }
+    ],
+    "done": [
+      { "system": "Glass" },
+      { "system": "Hero" },
+      { "system": "Purr" }
+    ]
+  }
+}

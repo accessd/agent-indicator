@@ -1,0 +1,40 @@
+{
+  "log_level": "warn",
+  "backends": {
+    "terminal": {
+      "enabled": "on"
+    },
+    "tmux": {
+      "enabled": "auto"
+    },
+    "sound": {
+      "enabled": "off",
+      "pack": "default",
+      "volume": 0.5,
+      "states": {
+        "needs-input": true,
+        "done": true
+      }
+    },
+    "desktop": {
+      "enabled": "off",
+      "states": {
+        "needs-input": true,
+        "done": true
+      },
+      "title_format": "[{agent}] {state}",
+      "body_format": "{agent} is {state}"
+    },
+    "push": {
+      "enabled": "off",
+      "service": "ntfy",
+      "topic": "",
+      "server": "https://ntfy.sh",
+      "token": "",
+      "states": {
+        "needs-input": true,
+        "done": true
+      }
+    }
+  }
+}
