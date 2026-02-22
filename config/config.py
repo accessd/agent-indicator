@@ -95,7 +95,10 @@ def save_config(cfg):
 # env vars always win over config file values.
 # ---------------------------------------------------------------------------
 ENV_MAP = {
-    "backends.terminal.enabled":          "AGENT_INDICATOR_TERMINAL",
+    "backends.terminal.enabled":              "AGENT_INDICATOR_TERMINAL",
+    "backends.terminal.bg_restore_timeout":   "AGENT_INDICATOR_TERMINAL_BG_RESTORE_TIMEOUT",
+    "backends.terminal.bg_needs_input":       "AGENT_INDICATOR_TERMINAL_BG_NEEDS_INPUT",
+    "backends.terminal.bg_done":              "AGENT_INDICATOR_TERMINAL_BG_DONE",
     "backends.sound.enabled":             "AGENT_INDICATOR_SOUND",
     "backends.sound.pack":                "AGENT_INDICATOR_SOUND_PACK",
     "backends.sound.volume":              "AGENT_INDICATOR_SOUND_VOLUME",

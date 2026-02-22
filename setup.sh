@@ -360,8 +360,27 @@ PY
     ok "codex config patched"
 }
 
+setup_opencode() {
+    header "8. OpenCode Integration"
+    local opencode_cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+    if ! command -v opencode >/dev/null 2>&1 && [ ! -d "$opencode_cfg_dir" ]; then
+        skip "opencode: not detected"
+        return
+    fi
+    printf '  OpenCode can call agent-indicator via a plugin.\n'
+    if ! ask_yn "Install OpenCode plugin?" "y"; then
+        skip "opencode: skipped"
+        return
+    fi
+    local plugins_dir="$opencode_cfg_dir/plugins"
+    local plugin_name="opencode-agent-indicator.js"
+    mkdir -p "$plugins_dir"
+    cp "$SCRIPT_DIR/plugins/$plugin_name" "$plugins_dir/$plugin_name"
+    ok "opencode plugin installed to $plugins_dir/$plugin_name"
+}
+
 setup_test() {
-    header "8. Test"
+    header "9. Test"
     if ! ask_yn "Run a quick test of enabled backends?" "y"; then
         skip "test: skipped"
         return
@@ -393,6 +412,35 @@ setup_summary() {
     local config_path
     config_path=$(python3 "$CONFIG_PY" --config-path 2>/dev/null || echo "$HOME/.config/agent-indicator/config.json")
     printf '  Config: %s%s%s\n' "$CYAN" "$config_path" "$RESET"
+
+    local claude_settings="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+    local codex_config="$HOME/.codex/config.toml"
+    local opencode_plugin="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/opencode-agent-indicator.js"
+    local has_integrations=false
+
+    if [ -f "$claude_settings" ] && grep -q "agent-indicator" "$claude_settings" 2>/dev/null; then
+        has_integrations=true
+    fi
+    if [ -f "$codex_config" ] && grep -q "agent-indicator" "$codex_config" 2>/dev/null; then
+        has_integrations=true
+    fi
+    if [ -f "$opencode_plugin" ]; then
+        has_integrations=true
+    fi
+
+    if [ "$has_integrations" = true ]; then
+        printf '\n  Integrations installed:\n'
+        if [ -f "$claude_settings" ] && grep -q "agent-indicator" "$claude_settings" 2>/dev/null; then
+            ok "Claude hooks -> $claude_settings"
+        fi
+        if [ -f "$codex_config" ] && grep -q "agent-indicator" "$codex_config" 2>/dev/null; then
+            ok "Codex notify -> $codex_config"
+        fi
+        if [ -f "$opencode_plugin" ]; then
+            ok "OpenCode plugin -> $opencode_plugin"
+        fi
+    fi
+
     printf '\n  Edit config: %s\n' "$config_path"
     printf '  Re-run setup: %s\n' "$SCRIPT_DIR/setup.sh"
     printf '  Test: %s --state needs-input\n\n' "$SCRIPT_DIR/agent-state.sh"
@@ -411,6 +459,7 @@ main() {
     setup_push
     setup_hooks
     setup_codex
+    setup_opencode
     setup_test
     setup_summary
 }

@@ -2,7 +2,10 @@
   "log_level": "warn",
   "backends": {
     "terminal": {
-      "enabled": "on"
+      "enabled": "on",
+      "bg_restore_timeout": 3,
+      "bg_needs_input": "3b3000",
+      "bg_done": "002b00"
     },
     "sound": {
       "enabled": "off",

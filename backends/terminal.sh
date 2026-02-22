@@ -163,8 +163,8 @@ terminal_apply() {
 
     detect_terminal
 
-    local bg_needs_input="3b3000"
-    local bg_done="002b00"
+    local bg_needs_input="${AGENT_INDICATOR_TERMINAL_BG_NEEDS_INPUT:-3b3000}"
+    local bg_done="${AGENT_INDICATOR_TERMINAL_BG_DONE:-002b00}"
 
     case "$state" in
         running)
@@ -182,22 +182,25 @@ terminal_apply() {
             set_title "Done"
             set_bg_color "$bg_done"
             send_notify "Agent" "Done"
-            # Restore bg after 3 seconds if still in done state
-            (
-                sleep 3
-                if [ -f "$state_file" ] && [ "$(head -1 "$state_file" 2>/dev/null)" = "done" ]; then
-                    if [ "$IN_TMUX" = true ]; then
-                        local seq
-                        seq=$(printf '\e]111\e\\')
-                        local wrapped
-                        wrapped=$(printf '%s' "$seq" | sed 's/\x1b/\x1b\x1b/g')
-                        printf '\ePtmux;%s\e\\' "$wrapped" > "$TARGET_TTY" 2>/dev/null || true
-                    else
-                        printf '\e]111\e\\' > "$TARGET_TTY" 2>/dev/null || true
+            # Restore bg after timeout if still in done state (0 = never restore)
+            local bg_timeout="${AGENT_INDICATOR_TERMINAL_BG_RESTORE_TIMEOUT:-3}"
+            if [ "$bg_timeout" != "0" ]; then
+                (
+                    sleep "$bg_timeout"
+                    if [ -f "$state_file" ] && [ "$(head -1 "$state_file" 2>/dev/null)" = "done" ]; then
+                        if [ "$IN_TMUX" = true ]; then
+                            local seq
+                            seq=$(printf '\e]111\e\\')
+                            local wrapped
+                            wrapped=$(printf '%s' "$seq" | sed 's/\x1b/\x1b\x1b/g')
+                            printf '\ePtmux;%s\e\\' "$wrapped" > "$TARGET_TTY" 2>/dev/null || true
+                        else
+                            printf '\e]111\e\\' > "$TARGET_TTY" 2>/dev/null || true
+                        fi
                     fi
-                fi
-            ) &
-            disown 2>/dev/null || true
+                ) &
+                disown 2>/dev/null || true
+            fi
             ;;
         off)
             restore_title

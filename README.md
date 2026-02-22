@@ -2,7 +2,7 @@
 
 Visual and audio indicators for AI agent state. Shows running, needs-input, done, and off states through four backends: terminal escape sequences, sound alerts, desktop notifications, and push notifications.
 
-Built for Claude Code (via hooks) and Codex (via notify), but works with any agent that can call a shell script.
+Built for Claude Code, Codex, and OpenCode. Works with any agent that can call a shell script.
 
 ## State mapping
 
@@ -10,7 +10,7 @@ Built for Claude Code (via hooks) and Codex (via notify), but works with any age
 |-------|--------------|-------------|-------|---------|------|
 | running | "Running..." | -- | -- | -- | -- |
 | needs-input | "Needs Input" | yellow tint | alert | yes | yes |
-| done | "Done" | green tint (3s) | chime | yes | yes |
+| done | "Done" | green tint (configurable timeout) | chime | yes | yes |
 | off | restore | restore | -- | -- | -- |
 
 ## Install
@@ -35,12 +35,13 @@ Installer flags:
 --target-dir <path>   Install location (default: ~/.local/share/agent-indicator)
 --no-claude           Skip Claude hooks setup
 --no-codex            Skip Codex config.toml patching
+--no-opencode         Skip OpenCode plugin setup
 --headless            Non-interactive, reads config from env vars
 --setup               Run interactive setup wizard after install
---uninstall           Remove files, config, and Claude hooks
+--uninstall           Remove files, config, and all integrations
 ```
 
-The installer copies files to `~/.local/share/agent-indicator` and patches `~/.claude/settings.json` with hooks that map Claude Code events to agent states.
+The installer copies files to `~/.local/share/agent-indicator`, auto-detects which agents are installed, and sets up integrations for each one. If an agent is not detected (no command in PATH and no config directory), its integration is skipped silently.
 
 ## Setup wizard
 
@@ -83,6 +84,14 @@ Sets tab title, background color tint, terminal-level notifications, and bell vi
 | Windows Terminal | OSC 2 | OSC 11 | OSC 9 |
 | GNOME/VTE | OSC 2 | OSC 11 | OSC 777 |
 | Alacritty | OSC 2 | OSC 11 | OSC 9 |
+
+Terminal-specific config:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `AGENT_INDICATOR_TERMINAL_BG_NEEDS_INPUT` | `3b3000` | Hex color for needs-input background (no # prefix) |
+| `AGENT_INDICATOR_TERMINAL_BG_DONE` | `002b00` | Hex color for done background (no # prefix) |
+| `AGENT_INDICATOR_TERMINAL_BG_RESTORE_TIMEOUT` | `3` | Seconds before done bg resets. Set to `0` to keep done bg until next state change |
 
 ### Tmux
 
@@ -172,7 +181,12 @@ Created by the setup wizard or manually. Example:
 ```json
 {
   "backends": {
-    "terminal": { "enabled": "on" },
+    "terminal": {
+      "enabled": "on",
+      "bg_restore_timeout": 3,
+      "bg_needs_input": "3b3000",
+      "bg_done": "002b00"
+    },
     "sound": { "enabled": "on", "volume": 0.7, "pack": "default" },
     "desktop": { "enabled": "on" },
     "push": { "enabled": "off" }
@@ -237,9 +251,13 @@ Or set it in config:
 python3 config/config.py --set backends.sound.pack my-pack
 ```
 
-## Claude Code hooks
+## Agent integrations
 
-The installer adds hooks to `~/.claude/settings.json`:
+The installer auto-detects which agents are present and configures each one. If an agent is not found, its integration is skipped. Re-run the installer after adding a new agent.
+
+### Claude Code
+
+Integrates via hooks in `~/.claude/settings.json`.
 
 | Hook event | State |
 |------------|-------|
@@ -247,17 +265,15 @@ The installer adds hooks to `~/.claude/settings.json`:
 | `PermissionRequest` | needs-input |
 | `Stop` | done |
 
-The reference template is in `hooks/claude-hooks.json`.
+The reference template is in `hooks/claude-hooks.json`. Detection: checks for `claude` command or `~/.claude/` directory.
 
-## Codex integration
+### Codex
 
-The installer patches `~/.codex/config.toml` with a `notify` key pointing to the adapter script:
+Integrates via the `notify` key in `~/.codex/config.toml`, which points to an adapter script that maps Codex events to states.
 
 ```toml
 notify = ["~/.local/share/agent-indicator/adapters/codex-notify.sh"]
 ```
-
-The adapter maps Codex event names to agent-indicator states:
 
 | Codex event | State |
 |-------------|-------|
@@ -265,7 +281,29 @@ The adapter maps Codex event names to agent-indicator states:
 | `permission*`, `approve*`, `needs-input`, `input-required`, `ask-user` | needs-input |
 | `agent-turn-complete`, `complete`, `done`, `stop`, `error`, `fail*` | done |
 
-If `~/.codex/` does not exist at install time, Codex patching is skipped. Re-run the installer after installing Codex, or add the notify line manually.
+Detection: checks for `codex` command or `~/.codex/` directory.
+
+### OpenCode
+
+Integrates via a JS plugin copied to `~/.config/opencode/plugins/opencode-agent-indicator.js`.
+
+| OpenCode event | State |
+|----------------|-------|
+| `session.status` (busy) | running |
+| `permission.updated`, `permission.asked`, `permission.ask`, `tool.execute.before` (question) | needs-input |
+| `session.idle`, `session.error` | done |
+
+The plugin tracks state internally and avoids redundant calls. A 2-second guard prevents race conditions between idle and busy events.
+
+Detection: checks for `opencode` command or `~/.config/opencode/` directory.
+
+Manual install (if not using the installer):
+
+```bash
+cp plugins/opencode-agent-indicator.js ~/.config/opencode/plugins/
+```
+
+Override the install path via `AGENT_INDICATOR_DIR` env var if agent-indicator is not at the default location.
 
 ## Project structure
 
@@ -282,6 +320,8 @@ agent-indicator/
     push.sh                       # ntfy, Pushover, Telegram via curl
   adapters/
     codex-notify.sh               # Codex event-to-state mapper
+  plugins/
+    opencode-agent-indicator.js   # OpenCode plugin
   packs/
     default/openpeon.json         # default sound pack (system sounds)
   lib/

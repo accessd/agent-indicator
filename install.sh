@@ -52,6 +52,7 @@ fi
 TARGET_DIR="${AGENT_INDICATOR_INSTALL_DIR:-$HOME/.local/share/agent-indicator}"
 INSTALL_CLAUDE=true
 INSTALL_CODEX=true
+INSTALL_OPENCODE=true
 UNINSTALL_MODE=false
 HEADLESS=false
 RUN_SETUP=false
@@ -64,6 +65,7 @@ Options:
   --target-dir <path>   Install path (default: ~/.local/share/agent-indicator)
   --no-claude           Skip Claude hooks setup
   --no-codex            Skip Codex config.toml patching
+  --no-opencode         Skip OpenCode plugin setup
   --uninstall           Remove agent-indicator files and hooks
   --headless            Non-interactive install (use env vars for config)
   --setup               Run setup wizard after install
@@ -84,6 +86,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --no-codex)
             INSTALL_CODEX=false
+            shift
+            ;;
+        --no-opencode)
+            INSTALL_OPENCODE=false
             shift
             ;;
         --uninstall)
@@ -166,6 +172,14 @@ PY
         echo "Removed agent-indicator notify from: $CODEX_CONFIG"
     fi
 
+    # Remove OpenCode plugin
+    OPENCODE_PLUGINS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
+    OPENCODE_PLUGIN_NAME="opencode-agent-indicator.js"
+    if [ -f "$OPENCODE_PLUGINS_DIR/$OPENCODE_PLUGIN_NAME" ]; then
+        rm -f "$OPENCODE_PLUGINS_DIR/$OPENCODE_PLUGIN_NAME"
+        echo "Removed OpenCode plugin from: $OPENCODE_PLUGINS_DIR"
+    fi
+
     # Remove installed files
     if [ -d "$TARGET_DIR" ]; then
         rm -rf "$TARGET_DIR"
@@ -186,7 +200,7 @@ fi
 # ---------------------------------------------------------------------------
 # Install files
 # ---------------------------------------------------------------------------
-mkdir -p "$TARGET_DIR/backends" "$TARGET_DIR/hooks" "$TARGET_DIR/lib" "$TARGET_DIR/config" "$TARGET_DIR/packs" "$TARGET_DIR/adapters"
+mkdir -p "$TARGET_DIR/backends" "$TARGET_DIR/hooks" "$TARGET_DIR/lib" "$TARGET_DIR/config" "$TARGET_DIR/packs" "$TARGET_DIR/adapters" "$TARGET_DIR/plugins"
 
 cp "$SCRIPT_DIR/agent-state.sh" "$TARGET_DIR/"
 cp "$SCRIPT_DIR/backends/"*.sh "$TARGET_DIR/backends/"
@@ -200,6 +214,11 @@ cp "$SCRIPT_DIR/config/config.py" "$TARGET_DIR/config/"
 # Copy packs
 if [ -d "$SCRIPT_DIR/packs" ]; then
     cp -r "$SCRIPT_DIR/packs/"* "$TARGET_DIR/packs/" 2>/dev/null || true
+fi
+
+# Copy plugins
+if [ -d "$SCRIPT_DIR/plugins" ]; then
+    cp "$SCRIPT_DIR/plugins/"*.js "$TARGET_DIR/plugins/" 2>/dev/null || true
 fi
 
 if [ -f "$SCRIPT_DIR/README.md" ]; then
@@ -228,6 +247,9 @@ if [ "$HEADLESS" = true ] && command -v python3 >/dev/null 2>&1; then
         fi
     }
     _set_if AGENT_INDICATOR_TERMINAL "backends.terminal.enabled"
+    _set_if AGENT_INDICATOR_TERMINAL_BG_RESTORE_TIMEOUT "backends.terminal.bg_restore_timeout"
+    _set_if AGENT_INDICATOR_TERMINAL_BG_NEEDS_INPUT "backends.terminal.bg_needs_input"
+    _set_if AGENT_INDICATOR_TERMINAL_BG_DONE "backends.terminal.bg_done"
     _set_if AGENT_INDICATOR_SOUND "backends.sound.enabled"
     _set_if AGENT_INDICATOR_SOUND_PACK "backends.sound.pack"
     _set_if AGENT_INDICATOR_SOUND_VOLUME "backends.sound.volume"
@@ -238,6 +260,29 @@ if [ "$HEADLESS" = true ] && command -v python3 >/dev/null 2>&1; then
     _set_if AGENT_INDICATOR_PUSH_SERVER "backends.push.server"
     _set_if AGENT_INDICATOR_PUSH_TOKEN "backends.push.token"
     echo "Config written from environment variables."
+fi
+
+# ---------------------------------------------------------------------------
+# Auto-detect agents: skip integration if agent not found on system
+# ---------------------------------------------------------------------------
+if [ "$INSTALL_CLAUDE" = true ]; then
+    CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+    if ! command -v claude >/dev/null 2>&1 && [ ! -d "$CLAUDE_DIR" ]; then
+        INSTALL_CLAUDE=false
+    fi
+fi
+
+if [ "$INSTALL_CODEX" = true ]; then
+    if ! command -v codex >/dev/null 2>&1 && [ ! -d "$HOME/.codex" ]; then
+        INSTALL_CODEX=false
+    fi
+fi
+
+if [ "$INSTALL_OPENCODE" = true ]; then
+    OPENCODE_CFG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+    if ! command -v opencode >/dev/null 2>&1 && [ ! -d "$OPENCODE_CFG_DIR" ]; then
+        INSTALL_OPENCODE=false
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -328,11 +373,41 @@ PY
 fi
 
 # ---------------------------------------------------------------------------
+# OpenCode plugin
+# ---------------------------------------------------------------------------
+OPENCODE_PLUGIN_NAME="opencode-agent-indicator.js"
+
+if [ "$INSTALL_OPENCODE" = true ]; then
+    OPENCODE_PLUGINS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
+    mkdir -p "$OPENCODE_PLUGINS_DIR"
+    cp "$TARGET_DIR/plugins/$OPENCODE_PLUGIN_NAME" "$OPENCODE_PLUGINS_DIR/$OPENCODE_PLUGIN_NAME"
+fi
+
+# ---------------------------------------------------------------------------
 # Post-install
 # ---------------------------------------------------------------------------
 if [ "$RUN_SETUP" = true ] && [ -f "$TARGET_DIR/setup.sh" ]; then
     echo ""
     exec "$TARGET_DIR/setup.sh"
+fi
+
+# Integrations summary
+INTEGRATIONS=""
+if [ "$INSTALL_CLAUDE" = true ]; then
+    CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+    INTEGRATIONS="${INTEGRATIONS}  Claude hooks  -> $CLAUDE_DIR/settings.json\n"
+fi
+if [ "$INSTALL_CODEX" = true ] && [ -d "$HOME/.codex" ]; then
+    INTEGRATIONS="${INTEGRATIONS}  Codex notify  -> $HOME/.codex/config.toml\n"
+fi
+if [ "$INSTALL_OPENCODE" = true ]; then
+    OPENCODE_PLUGINS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
+    INTEGRATIONS="${INTEGRATIONS}  OpenCode plugin -> $OPENCODE_PLUGINS_DIR/$OPENCODE_PLUGIN_NAME\n"
+fi
+
+if [ -n "$INTEGRATIONS" ]; then
+    printf '\nIntegrations installed:\n'
+    printf "$INTEGRATIONS"
 fi
 
 cat <<EOF
