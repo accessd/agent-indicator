@@ -96,7 +96,6 @@ def save_config(cfg):
 # ---------------------------------------------------------------------------
 ENV_MAP = {
     "backends.terminal.enabled":          "AGENT_INDICATOR_TERMINAL",
-    "backends.tmux.enabled":              "AGENT_INDICATOR_TMUX",
     "backends.sound.enabled":             "AGENT_INDICATOR_SOUND",
     "backends.sound.pack":                "AGENT_INDICATOR_SOUND_PACK",
     "backends.sound.volume":              "AGENT_INDICATOR_SOUND_VOLUME",

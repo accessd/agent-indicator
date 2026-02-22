@@ -1,0 +1,22 @@
+{
+  "cesp_version": "1.0",
+  "name": "Orc Peon",
+  "description": "Warcraft Orc Peon voice lines",
+  "sounds": {
+    "needs-input": [
+      { "file": "sounds/PeonWhat4.wav" },
+      { "file": "sounds/PeonWhat2.wav" },
+      { "file": "sounds/PeonWhat3.wav" },
+      { "file": "sounds/PeonWhat1.wav" }
+    ],
+    "done": [
+      { "file": "sounds/PeonReady1.wav" },
+      { "file": "sounds/PeonWhat4.wav" },
+      { "file": "sounds/PeonYes1.wav" },
+      { "file": "sounds/PeonYes2.wav" },
+      { "file": "sounds/PeonYes3.wav" },
+      { "file": "sounds/PeonYesAttack1.wav" },
+      { "file": "sounds/PeonYesAttack3.wav" }
+    ]
+  }
+}

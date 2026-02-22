@@ -77,11 +77,22 @@ _push_telegram() {
 # ---------------------------------------------------------------------------
 # Format templates (same logic as desktop.sh)
 # ---------------------------------------------------------------------------
+_push_capitalize() {
+    local s="$1"
+    local first rest
+    first="$(printf '%s' "${s:0:1}" | tr '[:lower:]' '[:upper:]')"
+    rest="${s:1}"
+    printf '%s%s' "$first" "$rest"
+}
+
 _push_format() {
     local template="$1" state="$2" agent="$3"
+    local agent_cap
+    agent_cap=$(_push_capitalize "$agent")
     local result="$template"
     result="${result//\{state\}/$state}"
-    result="${result//\{agent\}/$agent}"
+    result="${result//\{Agent\}/$agent_cap}"
+    result="${result//\{agent\}/$agent_cap}"
     printf '%s' "$result"
 }
 
@@ -121,8 +132,19 @@ push_apply() {
             ;;
     esac
 
-    local title="Agent: $state"
-    local body="$agent is $state"
+    local agent_cap
+    agent_cap=$(_push_capitalize "$agent")
+    local title="[${agent_cap}] ${state}"
+    local body="${agent_cap} is ${state}"
+
+    if [ "${IN_TMUX_SESSION:-false}" = "true" ]; then
+        local tmux_ctx
+        tmux_ctx=$(tmux display-message -p '#S:#W' 2>/dev/null || true)
+        if [ -n "$tmux_ctx" ]; then
+            body="$body in $tmux_ctx"
+        fi
+    fi
+
     local service="${AGENT_INDICATOR_PUSH_SERVICE:-ntfy}"
 
     case "$service" in

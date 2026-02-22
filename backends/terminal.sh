@@ -10,27 +10,55 @@ set -euo pipefail
 TERMINAL_TYPE="unknown"
 IN_TMUX=false
 
+_detect_term_program() {
+    local tp="$1"
+    case "$tp" in
+        iTerm.app)      TERMINAL_TYPE="iterm2" ;;
+        WezTerm)        TERMINAL_TYPE="wezterm" ;;
+        ghostty)        TERMINAL_TYPE="ghostty" ;;
+        Apple_Terminal) TERMINAL_TYPE="apple_terminal" ;;
+        *)              return 1 ;;
+    esac
+}
+
 detect_terminal() {
     if [ -n "${TMUX:-}" ]; then
         IN_TMUX=true
     fi
 
+    # Direct env detection (works outside tmux)
     if [ -n "${KITTY_PID:-}" ]; then
         TERMINAL_TYPE="kitty"
-    elif [ "${TERM_PROGRAM:-}" = "iTerm.app" ]; then
-        TERMINAL_TYPE="iterm2"
-    elif [ "${TERM_PROGRAM:-}" = "WezTerm" ]; then
-        TERMINAL_TYPE="wezterm"
-    elif [ "${TERM_PROGRAM:-}" = "ghostty" ]; then
-        TERMINAL_TYPE="ghostty"
-    elif [ "${TERM_PROGRAM:-}" = "Apple_Terminal" ]; then
-        TERMINAL_TYPE="apple_terminal"
+    elif _detect_term_program "${TERM_PROGRAM:-}"; then
+        true
     elif [ -n "${WT_SESSION:-}" ]; then
         TERMINAL_TYPE="windows_terminal"
     elif [ -n "${VTE_VERSION:-}" ]; then
         TERMINAL_TYPE="vte"
     elif [ -n "${ALACRITTY_SOCKET:-}" ]; then
         TERMINAL_TYPE="alacritty"
+    elif [ "$IN_TMUX" = true ]; then
+        # Inside tmux, env vars reflect tmux, not the outer terminal.
+        # Ask tmux for the original TERM_PROGRAM (session env, then global).
+        local outer_tp=""
+        outer_tp=$(tmux show-environment TERM_PROGRAM 2>/dev/null | sed 's/^TERM_PROGRAM=//' || true)
+        if [ -z "$outer_tp" ] || [ "$outer_tp" = "-TERM_PROGRAM" ]; then
+            outer_tp=$(tmux show-environment -g TERM_PROGRAM 2>/dev/null | sed 's/^TERM_PROGRAM=//' || true)
+        fi
+        if [ -n "$outer_tp" ] && [ "$outer_tp" != "-TERM_PROGRAM" ]; then
+            _detect_term_program "$outer_tp" || true
+        fi
+        # Kitty detection via tmux env
+        if [ "$TERMINAL_TYPE" = "unknown" ]; then
+            local outer_kitty=""
+            outer_kitty=$(tmux show-environment KITTY_PID 2>/dev/null | sed 's/^KITTY_PID=//' || true)
+            if [ -z "$outer_kitty" ] || [ "$outer_kitty" = "-KITTY_PID" ]; then
+                outer_kitty=$(tmux show-environment -g KITTY_PID 2>/dev/null | sed 's/^KITTY_PID=//' || true)
+            fi
+            if [ -n "$outer_kitty" ] && [ "$outer_kitty" != "-KITTY_PID" ]; then
+                TERMINAL_TYPE="kitty"
+            fi
+        fi
     fi
 }
 
@@ -53,10 +81,16 @@ emit() {
 # ---------------------------------------------------------------------------
 set_title() {
     local text="$1"
+    if [ "$IN_TMUX" = true ]; then
+        tmux select-pane -T "$text" 2>/dev/null || true
+    fi
     emit $'\e]2;'"$text"$'\e\\'
 }
 
 restore_title() {
+    if [ "$IN_TMUX" = true ]; then
+        tmux select-pane -T "" 2>/dev/null || true
+    fi
     emit $'\e]2;\e\\'
 }
 
@@ -65,7 +99,7 @@ restore_title() {
 # ---------------------------------------------------------------------------
 supports_bg_color() {
     case "$TERMINAL_TYPE" in
-        apple_terminal|unknown) return 1 ;;
+        apple_terminal) return 1 ;;
         *) return 0 ;;
     esac
 }
@@ -134,6 +168,7 @@ terminal_apply() {
 
     case "$state" in
         running)
+            restore_bg_color
             set_title "Running..."
             ;;
         needs-input)

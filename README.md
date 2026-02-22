@@ -1,17 +1,17 @@
 # agent-indicator
 
-Visual and audio indicators for AI agent state. Shows running, needs-input, done, and off states through five independent backends: terminal escape sequences, tmux styling, sound alerts, desktop notifications, and push notifications.
+Visual and audio indicators for AI agent state. Shows running, needs-input, done, and off states through four backends: terminal escape sequences, sound alerts, desktop notifications, and push notifications.
 
-Built for Claude Code via hooks, but works with any agent that can call a shell script.
+Built for Claude Code (via hooks) and Codex (via notify), but works with any agent that can call a shell script.
 
 ## State mapping
 
-| State | Terminal title | Terminal BG | Tmux border | Sound | Desktop | Push |
-|-------|--------------|-------------|-------------|-------|---------|------|
-| running | "Running..." | -- | -- | -- | -- | -- |
-| needs-input | "Needs Input" | yellow tint | yellow | alert | yes | yes |
-| done | "Done" | green tint (3s) | green | chime | yes | yes |
-| off | restore | restore | restore | -- | -- | -- |
+| State | Terminal title | Terminal BG | Sound | Desktop | Push |
+|-------|--------------|-------------|-------|---------|------|
+| running | "Running..." | -- | -- | -- | -- |
+| needs-input | "Needs Input" | yellow tint | alert | yes | yes |
+| done | "Done" | green tint (3s) | chime | yes | yes |
+| off | restore | restore | -- | -- | -- |
 
 ## Install
 
@@ -34,6 +34,7 @@ Installer flags:
 ```
 --target-dir <path>   Install location (default: ~/.local/share/agent-indicator)
 --no-claude           Skip Claude hooks setup
+--no-codex            Skip Codex config.toml patching
 --headless            Non-interactive, reads config from env vars
 --setup               Run interactive setup wizard after install
 --uninstall           Remove files, config, and Claude hooks
@@ -83,15 +84,9 @@ Sets tab title, background color tint, terminal-level notifications, and bell vi
 | GNOME/VTE | OSC 2 | OSC 11 | OSC 777 |
 | Alacritty | OSC 2 | OSC 11 | OSC 9 |
 
-### Tmux (default: auto)
+### Tmux
 
-Sets pane active border color and window status styling. Saves and restores original values on state reset. Auto mode enables this backend only when running inside a tmux session.
-
-Requires `allow-passthrough on` for the terminal backend to reach the outer terminal through tmux:
-
-```
-set -g allow-passthrough on
-```
+For tmux pane borders, window status styling, and animation, use the standalone [tmux-agent-indicator](https://github.com/accessd/tmux-agent-indicator) plugin. The setup wizard can install it for you.
 
 ### Sound (default: off)
 
@@ -178,7 +173,6 @@ Created by the setup wizard or manually. Example:
 {
   "backends": {
     "terminal": { "enabled": "on" },
-    "tmux": { "enabled": "auto" },
     "sound": { "enabled": "on", "volume": 0.7, "pack": "default" },
     "desktop": { "enabled": "on" },
     "push": { "enabled": "off" }
@@ -202,7 +196,6 @@ python3 config/config.py --ensure                   # create config file if miss
 | Env var | Default | Notes |
 |---------|---------|-------|
 | `AGENT_INDICATOR_TERMINAL` | on | |
-| `AGENT_INDICATOR_TMUX` | auto | on when inside tmux |
 | `AGENT_INDICATOR_SOUND` | off | |
 | `AGENT_INDICATOR_DESKTOP` | off | |
 | `AGENT_INDICATOR_PUSH` | off | |
@@ -256,16 +249,23 @@ The installer adds hooks to `~/.claude/settings.json`:
 
 The reference template is in `hooks/claude-hooks.json`.
 
-## Migrating from tmux-agent-indicator
+## Codex integration
 
-agent-indicator covers the core tmux-agent-indicator functionality (pane borders, window status styling). If you switch:
+The installer patches `~/.codex/config.toml` with a `notify` key pointing to the adapter script:
 
-```bash
-cd /path/to/tmux-agent-indicator && ./install.sh --uninstall-claude
-cd /path/to/agent-indicator && ./install.sh
+```toml
+notify = ["~/.local/share/agent-indicator/adapters/codex-notify.sh"]
 ```
 
-Both can coexist, but running both means duplicate tmux styling. Disable one tmux backend or the other (`AGENT_INDICATOR_TMUX=off`).
+The adapter maps Codex event names to agent-indicator states:
+
+| Codex event | State |
+|-------------|-------|
+| `start`, `session-start`, `turn-start`, `working` | running |
+| `permission*`, `approve*`, `needs-input`, `input-required`, `ask-user` | needs-input |
+| `agent-turn-complete`, `complete`, `done`, `stop`, `error`, `fail*` | done |
+
+If `~/.codex/` does not exist at install time, Codex patching is skipped. Re-run the installer after installing Codex, or add the notify line manually.
 
 ## Project structure
 
@@ -277,10 +277,11 @@ agent-indicator/
     config.py                     # config reader/writer (python3)
   backends/
     terminal.sh                   # escape sequences (title, bg, bell)
-    tmux.sh                       # pane border, window status styling
     sound.sh                      # CESP pack player with no-repeat
     desktop.sh                    # osascript/terminal-notifier, notify-send
     push.sh                       # ntfy, Pushover, Telegram via curl
+  adapters/
+    codex-notify.sh               # Codex event-to-state mapper
   packs/
     default/openpeon.json         # default sound pack (system sounds)
   lib/

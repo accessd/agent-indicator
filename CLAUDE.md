@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Shell + Python project (bash with python3 for config). No build step, no tests. All shell scripts use `set -euo pipefail`.
 
-Provides visual/audio indicators for AI agent state (running, needs-input, done, off) across five backends: terminal, tmux, sound, desktop notifications, and push notifications. Integrates with Claude Code via hooks.
+Provides visual/audio indicators for AI agent state (running, needs-input, done, off) across four backends: terminal, sound, desktop notifications, and push notifications. Integrates with Claude Code via hooks. For tmux styling, use the separate tmux-agent-indicator plugin.
 
 ## Manual testing
 
@@ -17,7 +17,7 @@ Provides visual/audio indicators for AI agent state (running, needs-input, done,
 ./agent-state.sh --state off
 ```
 
-Use `--tty /dev/ttysXXX` to target a specific terminal. Use `--agent <name>` for tmux/desktop/push tracking.
+Use `--tty /dev/ttysXXX` to target a specific terminal. Use `--agent <name>` for desktop/push tracking.
 
 Enable backends for testing:
 ```bash
@@ -34,10 +34,11 @@ agent-state.sh                    # entry point, dispatcher
 │   └── config.py                 # config reader/writer (python3)
 ├── backends/
 │   ├── terminal.sh               # escape sequences (title, bg, bell)
-│   ├── tmux.sh                   # pane border, window status styling
 │   ├── sound.sh                  # CESP pack player with no-repeat
 │   ├── desktop.sh                # macOS osascript/terminal-notifier, Linux notify-send
 │   └── push.sh                   # ntfy, Pushover, Telegram via curl
+├── adapters/
+│   └── codex-notify.sh           # Codex event-to-state mapper
 ├── packs/
 │   └── default/openpeon.json     # default sound pack manifest (system sounds)
 ├── lib/
@@ -80,7 +81,6 @@ Every backend exposes one public function:
 ```
 
 - `terminal_apply <state> <tty> <state_file>` -- OSC 2 title, OSC 11 bg color, OSC 9/777 notifications, bell. Wraps in tmux passthrough when inside tmux.
-- `tmux_apply <state> <agent>` -- pane border color, window status styling. Saves/restores original values via tmux env vars.
 - `sound_apply <state>` -- loads CESP pack manifest, picks sound (no-repeat), plays via afplay/paplay/aplay/play chain. Supports volume control.
 - `desktop_apply <state> <agent>` -- macOS: osascript or terminal-notifier. Linux: notify-send. Configurable title/body format templates.
 - `push_apply <state> <agent>` -- HTTP POST via curl to ntfy, Pushover, or Telegram.
@@ -89,7 +89,6 @@ Every backend exposes one public function:
 
 Controlled by env vars or config.json:
 - `AGENT_INDICATOR_TERMINAL` (default: on)
-- `AGENT_INDICATOR_TMUX` (default: auto -- enabled when inside tmux)
 - `AGENT_INDICATOR_SOUND` (default: off)
 - `AGENT_INDICATOR_DESKTOP` (default: off)
 - `AGENT_INDICATOR_PUSH` (default: off)
@@ -116,7 +115,7 @@ It copies all files to `~/.local/share/agent-indicator` and patches `~/.claude/s
 
 `setup.sh` is an interactive TUI that:
 1. Detects platform and available tools
-2. Walks through each backend (terminal, tmux, sound, desktop, push)
+2. Walks through each backend (terminal, sound, desktop, push) and offers tmux-agent-indicator install
 3. Writes config.json
 4. Patches Claude hooks
 5. Offers a test step

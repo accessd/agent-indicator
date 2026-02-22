@@ -1,0 +1,16 @@
+{
+  "cesp_version": "1.0",
+  "name": "Sява - Бодрячком",
+  "description": "Sява - Бодрячком sound pack",
+  "sounds": {
+    "needs-input": [
+      { "file": "sounds/07_cheche.wav" },
+      { "file": "sounds/02_opa.wav" }
+    ],
+    "done": [
+      { "file": "sounds/09_derzhimsya_outro.wav" },
+      { "file": "sounds/10_kachaet_outro.wav" },
+      { "file": "sounds/02_opa.wav" }
+    ]
+  }
+}

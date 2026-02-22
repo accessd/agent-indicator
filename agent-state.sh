@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agent-indicator: dispatch agent state to terminal, tmux, sound, desktop, and push backends.
+# agent-indicator: dispatch agent state to terminal, sound, desktop, and push backends.
 
 set -euo pipefail
 
@@ -12,10 +12,12 @@ Usage: agent-state.sh --state <running|needs-input|done|off> [--agent <name>] [-
 
 Backends (configure via ~/.config/agent-indicator/config.json or env vars):
   AGENT_INDICATOR_TERMINAL=on|off   Terminal escape sequences (default: on)
-  AGENT_INDICATOR_TMUX=on|off       Tmux pane/border styling (default: auto)
   AGENT_INDICATOR_SOUND=on|off      Audio alerts (default: off)
   AGENT_INDICATOR_DESKTOP=on|off    Desktop notifications (default: off)
   AGENT_INDICATOR_PUSH=on|off       Push notifications (default: off)
+
+For tmux styling, use tmux-agent-indicator plugin:
+  https://github.com/accessd/tmux-agent-indicator
 EOF
 }
 
@@ -128,16 +130,6 @@ opt_sound="${AGENT_INDICATOR_SOUND:-off}"
 opt_desktop="${AGENT_INDICATOR_DESKTOP:-off}"
 opt_push="${AGENT_INDICATOR_PUSH:-off}"
 
-# Tmux: "auto" means detect, "on"/"off" are explicit
-opt_tmux="${AGENT_INDICATOR_TMUX:-auto}"
-if [ "$opt_tmux" = "auto" ]; then
-    if [ "$IN_TMUX_SESSION" = "true" ]; then
-        opt_tmux="on"
-    else
-        opt_tmux="off"
-    fi
-fi
-
 is_on() {
     case "$1" in
         on|true|yes|1) return 0 ;;
@@ -155,13 +147,6 @@ if is_on "$opt_terminal"; then
     # shellcheck source=backends/terminal.sh
     source "$SCRIPT_DIR/backends/terminal.sh"
     terminal_apply "$STATE" "$TARGET_TTY" "$STATE_FILE" || log_warn "terminal backend failed"
-fi
-
-if is_on "$opt_tmux"; then
-    log_debug "dispatching tmux backend"
-    # shellcheck source=backends/tmux.sh
-    source "$SCRIPT_DIR/backends/tmux.sh"
-    tmux_apply "$STATE" "$AGENT" || log_warn "tmux backend failed"
 fi
 
 if is_on "$opt_sound"; then

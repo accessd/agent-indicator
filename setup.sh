@@ -59,9 +59,9 @@ ask_yn() {
 ask_input() {
     local prompt="$1" default="${2:-}"
     if [ -n "$default" ]; then
-        printf '  %s [%s]: ' "$prompt" "$default"
+        printf '  %s [%s]: ' "$prompt" "$default" >/dev/tty
     else
-        printf '  %s: ' "$prompt"
+        printf '  %s: ' "$prompt" >/dev/tty
     fi
     local val
     read -r val </dev/tty
@@ -72,13 +72,13 @@ ask_choice() {
     local prompt="$1"
     shift
     local options=("$@")
-    printf '  %s\n' "$prompt"
+    printf '  %s\n' "$prompt" >/dev/tty
     local i=1
     for opt in "${options[@]}"; do
-        printf '    %s%d%s) %s\n' "$CYAN" "$i" "$RESET" "$opt"
+        printf '    %s%d%s) %s\n' "$CYAN" "$i" "$RESET" "$opt" >/dev/tty
         ((i++))
     done
-    printf '  Choice: '
+    printf '  Choice: ' >/dev/tty
     local choice
     read -r choice </dev/tty
     choice="${choice:-1}"
@@ -123,28 +123,22 @@ setup_terminal() {
 
 setup_tmux() {
     header "2. Tmux Styling"
-    printf '  Changes pane border color and window status bar styling.\n'
-    local tmux_default="n"
-    if [ "$HAS_TMUX" = "true" ]; then
-        tmux_default="y"
-        if [ "$IN_TMUX_SESSION" = "true" ]; then
-            printf '  %s(tmux session detected)%s\n' "$GREEN" "$RESET"
-        fi
-    else
-        printf '  %s(tmux not found)%s\n' "$DIM" "$RESET"
+    printf '  For tmux pane borders, window status, and animation use tmux-agent-indicator.\n'
+    printf '  https://github.com/accessd/tmux-agent-indicator\n'
+    if [ "$HAS_TMUX" != "true" ]; then
+        skip "tmux not found, skipping"
+        return
     fi
-    if ask_yn "Enable tmux backend?" "$tmux_default"; then
-        if [ "$IN_TMUX_SESSION" = "true" ] || [ "$HAS_TMUX" = "true" ]; then
-            cfg_set "backends.tmux.enabled" "auto"
-            ok "tmux: auto (enabled when inside tmux)"
-        else
-            cfg_set "backends.tmux.enabled" "true"
-            ok "tmux: enabled"
-        fi
-    else
-        cfg_set "backends.tmux.enabled" "false"
-        skip "tmux: disabled"
+    if ! ask_yn "Install tmux-agent-indicator plugin?" "y"; then
+        skip "tmux-agent-indicator: skipped"
+        return
     fi
+    if curl -fsSL https://raw.githubusercontent.com/accessd/tmux-agent-indicator/main/install.sh | bash; then
+        ok "tmux-agent-indicator installed"
+    else
+        warn "tmux-agent-indicator install failed"
+    fi
+    printf '  See tmux-agent-indicator README for config options.\n'
 }
 
 setup_sound() {
@@ -333,8 +327,41 @@ PY
     ok "hooks patched"
 }
 
+setup_codex() {
+    header "7. Codex Integration"
+    local codex_dir="$HOME/.codex"
+    if [ ! -d "$codex_dir" ]; then
+        skip "codex: ~/.codex/ not found"
+        return
+    fi
+    printf '  Codex can call agent-indicator on state transitions via its notify key.\n'
+    if ! ask_yn "Patch ~/.codex/config.toml?" "y"; then
+        skip "codex: skipped"
+        return
+    fi
+    local codex_config="$codex_dir/config.toml"
+    python3 - "$codex_config" "$SCRIPT_DIR" <<'PY'
+import re, pathlib, sys
+config_path = pathlib.Path(sys.argv[1])
+target_dir = sys.argv[2]
+notify_value = f'notify = ["{target_dir}/adapters/codex-notify.sh"]'
+try:
+    text = config_path.read_text(encoding="utf-8")
+except Exception:
+    text = ""
+new_text = re.sub(r'^notify\s*=\s*\[.*agent-indicator.*\]\s*\n?', '', text, flags=re.MULTILINE)
+new_text = re.sub(r'^notify\s*=\s*\[.*\]\s*\n?', '', new_text, flags=re.MULTILINE)
+new_text = new_text.rstrip('\n')
+if new_text:
+    new_text += '\n'
+new_text += notify_value + '\n'
+config_path.write_text(new_text, encoding="utf-8")
+PY
+    ok "codex config patched"
+}
+
 setup_test() {
-    header "7. Test"
+    header "8. Test"
     if ! ask_yn "Run a quick test of enabled backends?" "y"; then
         skip "test: skipped"
         return
@@ -383,6 +410,7 @@ main() {
     setup_desktop
     setup_push
     setup_hooks
+    setup_codex
     setup_test
     setup_summary
 }

@@ -49,11 +49,22 @@ _send_desktop_notification() {
 # ---------------------------------------------------------------------------
 # Format templates
 # ---------------------------------------------------------------------------
+_capitalize() {
+    local s="$1"
+    local first rest
+    first="$(printf '%s' "${s:0:1}" | tr '[:lower:]' '[:upper:]')"
+    rest="${s:1}"
+    printf '%s%s' "$first" "$rest"
+}
+
 _format() {
     local template="$1" state="$2" agent="$3"
+    local agent_cap
+    agent_cap=$(_capitalize "$agent")
     local result="$template"
     result="${result//\{state\}/$state}"
-    result="${result//\{agent\}/$agent}"
+    result="${result//\{Agent\}/$agent_cap}"
+    result="${result//\{agent\}/$agent_cap}"
     printf '%s' "$result"
 }
 
@@ -87,12 +98,20 @@ desktop_apply() {
             ;;
     esac
 
-    local title_fmt="${AGENT_INDICATOR_DESKTOP_TITLE_FORMAT:-[{agent}] {state}}"
-    local body_fmt="${AGENT_INDICATOR_DESKTOP_BODY_FORMAT:-{agent} is {state}}"
+    local title_fmt="${AGENT_INDICATOR_DESKTOP_TITLE_FORMAT:-[{agent\}] {state\}}"
+    local body_fmt="${AGENT_INDICATOR_DESKTOP_BODY_FORMAT:-{agent\} is {state\}}"
 
     local title body
     title=$(_format "$title_fmt" "$state" "$agent")
     body=$(_format "$body_fmt" "$state" "$agent")
+
+    if [ "${IN_TMUX_SESSION:-false}" = "true" ]; then
+        local tmux_ctx
+        tmux_ctx=$(tmux display-message -p '#S:#W' 2>/dev/null || true)
+        if [ -n "$tmux_ctx" ]; then
+            body="$body in $tmux_ctx"
+        fi
+    fi
 
     _send_desktop_notification "$title" "$body"
 }
