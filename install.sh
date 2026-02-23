@@ -50,12 +50,9 @@ if [ -z "$SCRIPT_DIR" ] || [ ! -f "$SCRIPT_DIR/agent-state.sh" ]; then
 fi
 
 TARGET_DIR="${AGENT_INDICATOR_INSTALL_DIR:-$HOME/.local/share/agent-indicator}"
-INSTALL_CLAUDE=true
-INSTALL_CODEX=true
-INSTALL_OPENCODE=true
 UNINSTALL_MODE=false
 HEADLESS=false
-RUN_SETUP=false
+SKIP_SETUP=false
 
 usage() {
     cat <<'EOF'
@@ -63,12 +60,9 @@ Usage: install.sh [OPTIONS]
 
 Options:
   --target-dir <path>   Install path (default: ~/.local/share/agent-indicator)
-  --no-claude           Skip Claude hooks setup
-  --no-codex            Skip Codex config.toml patching
-  --no-opencode         Skip OpenCode plugin setup
   --uninstall           Remove agent-indicator files and hooks
   --headless            Non-interactive install (use env vars for config)
-  --setup               Run setup wizard after install
+  --skip-setup          Skip interactive setup wizard after install
   -h, --help            Show this help
 EOF
 }
@@ -80,29 +74,17 @@ while [ "$#" -gt 0 ]; do
             TARGET_DIR="$2"
             shift 2
             ;;
-        --no-claude)
-            INSTALL_CLAUDE=false
-            shift
-            ;;
-        --no-codex)
-            INSTALL_CODEX=false
-            shift
-            ;;
-        --no-opencode)
-            INSTALL_OPENCODE=false
-            shift
-            ;;
         --uninstall)
             UNINSTALL_MODE=true
-            INSTALL_CLAUDE=false
             shift
             ;;
         --headless)
             HEADLESS=true
+            SKIP_SETUP=true
             shift
             ;;
-        --setup)
-            RUN_SETUP=true
+        --skip-setup)
+            SKIP_SETUP=true
             shift
             ;;
         -h|--help)
@@ -155,20 +137,10 @@ PY
         echo "Removed agent-indicator hooks from: $CLAUDE_SETTINGS"
     fi
 
-    # Remove notify line from Codex config.toml
+    # Remove notify line from Codex config.toml (restore original if chained)
     CODEX_CONFIG="$HOME/.codex/config.toml"
     if [ -f "$CODEX_CONFIG" ] && command -v python3 >/dev/null 2>&1; then
-        python3 - "$CODEX_CONFIG" <<'PY'
-import re, pathlib, sys
-config_path = pathlib.Path(sys.argv[1])
-try:
-    text = config_path.read_text(encoding="utf-8")
-except Exception:
-    sys.exit(0)
-new_text = re.sub(r'^notify\s*=\s*\[.*agent-indicator.*\]\s*\n?', '', text, flags=re.MULTILINE)
-if new_text != text:
-    config_path.write_text(new_text, encoding="utf-8")
-PY
+        python3 "$TARGET_DIR/config/codex_config.py" unpatch "$CODEX_CONFIG" "$TARGET_DIR"
         echo "Removed agent-indicator notify from: $CODEX_CONFIG"
     fi
 
@@ -210,6 +182,7 @@ chmod +x "$TARGET_DIR/adapters/"*.sh
 cp "$SCRIPT_DIR/lib/"*.sh "$TARGET_DIR/lib/"
 cp "$SCRIPT_DIR/config/defaults.json" "$TARGET_DIR/config/"
 cp "$SCRIPT_DIR/config/config.py" "$TARGET_DIR/config/"
+cp "$SCRIPT_DIR/config/codex_config.py" "$TARGET_DIR/config/"
 
 # Copy packs
 if [ -d "$SCRIPT_DIR/packs" ]; then
@@ -263,157 +236,17 @@ if [ "$HEADLESS" = true ] && command -v python3 >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# Auto-detect agents: skip integration if agent not found on system
+# Post-install: run setup wizard
 # ---------------------------------------------------------------------------
-if [ "$INSTALL_CLAUDE" = true ]; then
-    CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-    if ! command -v claude >/dev/null 2>&1 && [ ! -d "$CLAUDE_DIR" ]; then
-        INSTALL_CLAUDE=false
-    fi
-fi
-
-if [ "$INSTALL_CODEX" = true ]; then
-    if ! command -v codex >/dev/null 2>&1 && [ ! -d "$HOME/.codex" ]; then
-        INSTALL_CODEX=false
-    fi
-fi
-
-if [ "$INSTALL_OPENCODE" = true ]; then
-    OPENCODE_CFG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
-    if ! command -v opencode >/dev/null 2>&1 && [ ! -d "$OPENCODE_CFG_DIR" ]; then
-        INSTALL_OPENCODE=false
-    fi
-fi
-
-# ---------------------------------------------------------------------------
-# Claude hooks
-# ---------------------------------------------------------------------------
-if [ "$INSTALL_CLAUDE" = true ]; then
-    CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-    CLAUDE_SETTINGS="$CLAUDE_DIR/settings.json"
-    mkdir -p "$CLAUDE_DIR"
-    if [ ! -f "$CLAUDE_SETTINGS" ]; then
-        printf '{}\n' > "$CLAUDE_SETTINGS"
-    fi
-
-    if [ -f "$CLAUDE_SETTINGS" ] && command -v python3 >/dev/null 2>&1; then
-        python3 - "$CLAUDE_SETTINGS" "$TARGET_DIR" "install" <<'PY'
-import json, pathlib, sys
-settings_path = pathlib.Path(sys.argv[1])
-target_dir = sys.argv[2]
-try:
-    settings = json.loads(settings_path.read_text(encoding="utf-8"))
-except Exception:
-    settings = {}
-hooks = settings.setdefault("hooks", {})
-# Remove existing agent-indicator hooks
-for event in list(hooks.keys()):
-    entries = hooks.get(event, [])
-    cleaned = []
-    for entry in entries:
-        hook_items = entry.get("hooks", [])
-        filtered = [h for h in hook_items if not ("agent-state.sh" in h.get("command", "") and "agent-indicator" in h.get("command", ""))]
-        if hook_items and not filtered:
-            continue
-        if filtered != hook_items:
-            entry = dict(entry)
-            entry["hooks"] = filtered
-        cleaned.append(entry)
-    if cleaned:
-        hooks[event] = cleaned
-    else:
-        hooks.pop(event, None)
-# Add fresh hooks
-events = {
-    "UserPromptSubmit": f"\"${{AGENT_INDICATOR_DIR:-{target_dir}}}\"/agent-state.sh --state running",
-    "PermissionRequest": f"\"${{AGENT_INDICATOR_DIR:-{target_dir}}}\"/agent-state.sh --state needs-input",
-    "Stop": f"\"${{AGENT_INDICATOR_DIR:-{target_dir}}}\"/agent-state.sh --state done",
-}
-for event, command in events.items():
-    entries = hooks.get(event, [])
-    entries.append({"matcher": "", "hooks": [{"type": "command", "command": command}]})
-    hooks[event] = entries
-settings["hooks"] = hooks
-settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
-PY
-        echo "Added hooks to: $CLAUDE_SETTINGS"
-    fi
-fi
-
-# ---------------------------------------------------------------------------
-# Codex config.toml
-# ---------------------------------------------------------------------------
-if [ "$INSTALL_CODEX" = true ]; then
-    CODEX_DIR="$HOME/.codex"
-    CODEX_CONFIG="$CODEX_DIR/config.toml"
-    if [ -d "$CODEX_DIR" ] && command -v python3 >/dev/null 2>&1; then
-        python3 - "$CODEX_CONFIG" "$TARGET_DIR" <<'PY'
-import re, pathlib, sys
-config_path = pathlib.Path(sys.argv[1])
-target_dir = sys.argv[2]
-notify_value = f'notify = ["{target_dir}/adapters/codex-notify.sh"]'
-try:
-    text = config_path.read_text(encoding="utf-8")
-except Exception:
-    text = ""
-# Remove existing agent-indicator notify line
-new_text = re.sub(r'^notify\s*=\s*\[.*agent-indicator.*\]\s*\n?', '', text, flags=re.MULTILINE)
-# Remove existing notify line (any) to replace it
-new_text = re.sub(r'^notify\s*=\s*\[.*\]\s*\n?', '', new_text, flags=re.MULTILINE)
-new_text = new_text.rstrip('\n')
-if new_text:
-    new_text += '\n'
-new_text += notify_value + '\n'
-config_path.write_text(new_text, encoding="utf-8")
-PY
-        echo "Patched Codex config: $CODEX_CONFIG"
-    elif [ ! -d "$CODEX_DIR" ]; then
-        echo "Skipped Codex: ~/.codex/ not found (install Codex first, then re-run)"
-    fi
-fi
-
-# ---------------------------------------------------------------------------
-# OpenCode plugin
-# ---------------------------------------------------------------------------
-OPENCODE_PLUGIN_NAME="opencode-agent-indicator.js"
-
-if [ "$INSTALL_OPENCODE" = true ]; then
-    OPENCODE_PLUGINS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
-    mkdir -p "$OPENCODE_PLUGINS_DIR"
-    cp "$TARGET_DIR/plugins/$OPENCODE_PLUGIN_NAME" "$OPENCODE_PLUGINS_DIR/$OPENCODE_PLUGIN_NAME"
-fi
-
-# ---------------------------------------------------------------------------
-# Post-install
-# ---------------------------------------------------------------------------
-if [ "$RUN_SETUP" = true ] && [ -f "$TARGET_DIR/setup.sh" ]; then
+if [ "$SKIP_SETUP" != true ] && [ -f "$TARGET_DIR/setup.sh" ]; then
     echo ""
     exec "$TARGET_DIR/setup.sh"
 fi
 
-# Integrations summary
-INTEGRATIONS=""
-if [ "$INSTALL_CLAUDE" = true ]; then
-    CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-    INTEGRATIONS="${INTEGRATIONS}  Claude hooks  -> $CLAUDE_DIR/settings.json\n"
-fi
-if [ "$INSTALL_CODEX" = true ] && [ -d "$HOME/.codex" ]; then
-    INTEGRATIONS="${INTEGRATIONS}  Codex notify  -> $HOME/.codex/config.toml\n"
-fi
-if [ "$INSTALL_OPENCODE" = true ]; then
-    OPENCODE_PLUGINS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
-    INTEGRATIONS="${INTEGRATIONS}  OpenCode plugin -> $OPENCODE_PLUGINS_DIR/$OPENCODE_PLUGIN_NAME\n"
-fi
-
-if [ -n "$INTEGRATIONS" ]; then
-    printf '\nIntegrations installed:\n'
-    printf "$INTEGRATIONS"
-fi
-
 cat <<EOF
 
-Configure via: ~/.config/agent-indicator/config.json
-  Or run: $TARGET_DIR/setup.sh
+Run the setup wizard to configure backends and agent integrations:
+  $TARGET_DIR/setup.sh
 
 Env var overrides still work:
   export AGENT_INDICATOR_TERMINAL=on   # tab title, bg color, notifications (default: on)
@@ -423,10 +256,4 @@ Env var overrides still work:
 
 For tmux styling, use tmux-agent-indicator:
   https://github.com/accessd/tmux-agent-indicator
-
-Test manually:
-  $TARGET_DIR/agent-state.sh --state running
-  $TARGET_DIR/agent-state.sh --state needs-input
-  $TARGET_DIR/agent-state.sh --state done
-  $TARGET_DIR/agent-state.sh --state off
 EOF

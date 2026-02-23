@@ -33,22 +33,17 @@ Installer flags:
 
 ```
 --target-dir <path>   Install location (default: ~/.local/share/agent-indicator)
---no-claude           Skip Claude hooks setup
---no-codex            Skip Codex config.toml patching
---no-opencode         Skip OpenCode plugin setup
---headless            Non-interactive, reads config from env vars
---setup               Run interactive setup wizard after install
+--skip-setup          Skip the interactive setup wizard after install
+--headless            Non-interactive, reads config from env vars (implies --skip-setup)
 --uninstall           Remove files, config, and all integrations
 ```
 
-The installer copies files to `~/.local/share/agent-indicator`, auto-detects which agents are installed, and sets up integrations for each one. If an agent is not detected (no command in PATH and no config directory), its integration is skipped silently.
+The installer copies files to `~/.local/share/agent-indicator` and launches the setup wizard. The wizard detects your platform, walks through each backend, configures agent integrations (Claude, Codex, OpenCode), and runs a test.
 
-## Setup wizard
-
-Run `./setup.sh` for an interactive walkthrough that detects your platform, configures each backend, patches Claude hooks, and runs a test.
+To reconfigure later:
 
 ```bash
-./setup.sh
+~/.local/share/agent-indicator/setup.sh
 ```
 
 ## Usage
@@ -253,7 +248,7 @@ python3 config/config.py --set backends.sound.pack my-pack
 
 ## Agent integrations
 
-The installer auto-detects which agents are present and configures each one. If an agent is not found, its integration is skipped. Re-run the installer after adding a new agent.
+The setup wizard auto-detects which agents are present and configures each one. If an agent is not found, its integration is skipped. Re-run setup after adding a new agent.
 
 ### Claude Code
 
@@ -274,6 +269,8 @@ Integrates via the `notify` key in `~/.codex/config.toml`, which points to an ad
 ```toml
 notify = ["~/.local/share/agent-indicator/adapters/codex-notify.sh"]
 ```
+
+If `config.toml` already has a `notify` script (e.g. from tmux-agent-indicator), setup generates a chain wrapper that calls both scripts instead of replacing the existing one. Uninstall restores the original.
 
 | Codex event | State |
 |-------------|-------|
@@ -313,6 +310,7 @@ agent-indicator/
   config/
     defaults.json                 # default config values
     config.py                     # config reader/writer (python3)
+    codex_config.py               # Codex config.toml patcher (chain-aware)
   backends/
     terminal.sh                   # escape sequences (title, bg, bell)
     sound.sh                      # CESP pack player with no-repeat

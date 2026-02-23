@@ -31,7 +31,8 @@ AGENT_INDICATOR_DESKTOP=on ./agent-state.sh --state done
 agent-state.sh                    # entry point, dispatcher
 ├── config/
 │   ├── defaults.json             # default config values
-│   └── config.py                 # config reader/writer (python3)
+│   ├── config.py                 # config reader/writer (python3)
+│   └── codex_config.py           # Codex config.toml patcher (chain-aware)
 ├── backends/
 │   ├── terminal.sh               # escape sequences (title, bg, bell)
 │   ├── sound.sh                  # CESP pack player with no-repeat
@@ -99,17 +100,16 @@ Sound packs use CESP v1.0 format. Each pack has an `openpeon.json` manifest list
 
 ## Installer
 
-`install.sh` works two ways:
+`install.sh` copies files to `~/.local/share/agent-indicator` and launches the setup wizard. Works two ways:
 - From a local clone (detects `agent-state.sh` next to itself)
 - Via curl pipe to bash (downloads tarball to temp dir)
 
 Flags:
-- `--headless`: non-interactive, reads config from env vars
-- `--setup`: runs setup wizard after install
-- `--uninstall`: removes files, config, and hooks
-- `--no-claude`: skip Claude hook patching
+- `--skip-setup`: skip the interactive setup wizard
+- `--headless`: non-interactive, reads config from env vars (implies `--skip-setup`)
+- `--uninstall`: removes files, config, and all integrations
 
-It copies all files to `~/.local/share/agent-indicator` and patches `~/.claude/settings.json` with hooks.
+Agent integrations (Claude hooks, Codex config, OpenCode plugin) are configured by `setup.sh`, not the installer itself.
 
 ## Setup wizard
 
@@ -117,7 +117,7 @@ It copies all files to `~/.local/share/agent-indicator` and patches `~/.claude/s
 1. Detects platform and available tools
 2. Walks through each backend (terminal, sound, desktop, push) and offers tmux-agent-indicator install
 3. Writes config.json
-4. Patches Claude hooks
+4. Patches Claude hooks, Codex config.toml, and OpenCode plugin
 5. Offers a test step
 
 ## Hooks template

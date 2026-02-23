@@ -153,6 +153,30 @@ setup_sound() {
     fi
     if ask_yn "Enable sound backend?" "n"; then
         cfg_set "backends.sound.enabled" "true"
+
+        # Discover available packs
+        local packs_dir="$SCRIPT_DIR/packs"
+        local pack_dirs=() pack_labels=()
+        for manifest in "$packs_dir"/*/openpeon.json; do
+            [ -f "$manifest" ] || continue
+            local dir_name pack_name
+            dir_name="$(basename "$(dirname "$manifest")")"
+            pack_name="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('name',sys.argv[2]))" "$manifest" "$dir_name" 2>/dev/null || echo "$dir_name")"
+            pack_dirs+=("$dir_name")
+            pack_labels+=("$pack_name ($dir_name)")
+        done
+
+        local pack_id
+        if [ "${#pack_dirs[@]}" -gt 1 ]; then
+            local choice
+            choice=$(ask_choice "Sound pack:" "${pack_labels[@]}")
+            # Extract dir name from "Label (dirname)" format
+            pack_id="$(echo "$choice" | sed 's/.*(\(.*\))/\1/')"
+        else
+            pack_id="${pack_dirs[0]:-default}"
+        fi
+        cfg_set "backends.sound.pack" "$pack_id"
+
         local vol
         vol=$(ask_input "Volume (0.0-1.0)" "0.7")
         cfg_set "backends.sound.volume" "$vol"
@@ -166,7 +190,7 @@ setup_sound() {
         else
             cfg_set "backends.sound.states.done" "false"
         fi
-        ok "sound: enabled (volume: $vol)"
+        ok "sound: enabled (pack: $pack_id, volume: $vol)"
     else
         cfg_set "backends.sound.enabled" "false"
         skip "sound: disabled"
@@ -340,23 +364,7 @@ setup_codex() {
         return
     fi
     local codex_config="$codex_dir/config.toml"
-    python3 - "$codex_config" "$SCRIPT_DIR" <<'PY'
-import re, pathlib, sys
-config_path = pathlib.Path(sys.argv[1])
-target_dir = sys.argv[2]
-notify_value = f'notify = ["{target_dir}/adapters/codex-notify.sh"]'
-try:
-    text = config_path.read_text(encoding="utf-8")
-except Exception:
-    text = ""
-new_text = re.sub(r'^notify\s*=\s*\[.*agent-indicator.*\]\s*\n?', '', text, flags=re.MULTILINE)
-new_text = re.sub(r'^notify\s*=\s*\[.*\]\s*\n?', '', new_text, flags=re.MULTILINE)
-new_text = new_text.rstrip('\n')
-if new_text:
-    new_text += '\n'
-new_text += notify_value + '\n'
-config_path.write_text(new_text, encoding="utf-8")
-PY
+    python3 "$SCRIPT_DIR/config/codex_config.py" patch "$codex_config" "$SCRIPT_DIR"
     ok "codex config patched"
 }
 
