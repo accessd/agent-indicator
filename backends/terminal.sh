@@ -177,6 +177,24 @@ terminal_apply() {
             send_notify "Agent" "Needs input"
             bell
             iterm2_attention
+            local bg_timeout="${AGENT_INDICATOR_TERMINAL_BG_RESTORE_TIMEOUT:-3}"
+            if [ "$bg_timeout" != "0" ]; then
+                (
+                    sleep "$bg_timeout"
+                    if [ -f "$state_file" ] && [ "$(head -1 "$state_file" 2>/dev/null)" = "needs-input" ]; then
+                        if [ "$IN_TMUX" = true ]; then
+                            local seq
+                            seq=$(printf '\e]111\e\\')
+                            local wrapped
+                            wrapped=$(printf '%s' "$seq" | sed 's/\x1b/\x1b\x1b/g')
+                            printf '\ePtmux;%s\e\\' "$wrapped" > "$TARGET_TTY" 2>/dev/null || true
+                        else
+                            printf '\e]111\e\\' > "$TARGET_TTY" 2>/dev/null || true
+                        fi
+                    fi
+                ) &
+                disown 2>/dev/null || true
+            fi
             ;;
         done)
             set_title "Done"

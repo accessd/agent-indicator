@@ -4,14 +4,24 @@ Visual and audio indicators for AI agent state. Shows running, needs-input, done
 
 Built for Claude Code, Codex, and OpenCode. Works with any agent that can call a shell script.
 
-## State mapping
+## How it works
+
+Your AI agent triggers a hook on state change. The hook calls `agent-state.sh`, which dispatches to whichever backends you enabled.
+
+Each state triggers different actions depending on the backend:
 
 | State | Terminal title | Terminal BG | Sound | Desktop | Push |
 |-------|--------------|-------------|-------|---------|------|
-| running | "Running..." | -- | -- | -- | -- |
+| running | "Running..." | restore | -- | -- | -- |
 | needs-input | "Needs Input" | yellow tint | alert | yes | yes |
 | done | "Done" | green tint (configurable timeout) | chime | yes | yes |
 | off | restore | restore | -- | -- | -- |
+
+## Prerequisites
+
+- bash
+- python3 (config system and setup wizard)
+- curl + tar (remote install only)
 
 ## Install
 
@@ -45,6 +55,19 @@ To reconfigure later:
 ~/.local/share/agent-indicator/setup.sh
 ```
 
+## Uninstall
+
+```bash
+~/.local/share/agent-indicator/install.sh --uninstall
+```
+
+This removes:
+- Installed files (`~/.local/share/agent-indicator`)
+- Config directory (`~/.config/agent-indicator`)
+- Claude Code hooks from `~/.claude/settings.json`
+- Codex notify entry from `~/.codex/config.toml` (restores original if chained)
+- OpenCode plugin from `~/.config/opencode/plugins/`
+
 ## Usage
 
 ```bash
@@ -60,17 +83,20 @@ Options:
 --state <running|needs-input|done|off>   Required
 --agent <name>                           Agent name for tracking (default: claude)
 --tty /dev/ttysXXX                       Target specific terminal
+-h, --help                               Show help
 ```
 
 ## Backends
 
 ### Terminal (default: on)
 
-Sets tab title, background color tint, terminal-level notifications, and bell via escape sequences. Works with most modern terminals. Wraps sequences in tmux passthrough when inside tmux.
+Sets tab title, background color tint, bell, and terminal-level notifications via escape sequences. Works with most modern terminals. Wraps sequences in tmux passthrough when inside tmux.
+
+On needs-input, the terminal backend also fires a bell character (`\a`) and, on iTerm2, requests dock attention via `OSC 1337;RequestAttention`.
 
 | Terminal | Title | BG color | Notification |
 |----------|-------|----------|-------------|
-| iTerm2 | OSC 2 | OSC 11 | OSC 9 + dock bounce |
+| iTerm2 | OSC 2 | OSC 11 | OSC 9, OSC 1337 (dock bounce) |
 | WezTerm | OSC 2 | OSC 11 | OSC 9 |
 | Kitty | OSC 2 | OSC 11 | OSC 777 |
 | Ghostty | OSC 2 | OSC 11 | OSC 9 |
@@ -129,17 +155,21 @@ Supports format templates with `{agent}` and `{state}` placeholders:
 
 Sends HTTP notifications to your phone via one of three services. Requires `curl`.
 
-**ntfy** (easiest, no signup for public topics):
+| Service | `service` value | `token` | `topic` | `server` |
+|---------|----------------|---------|---------|----------|
+| ntfy | `ntfy` | access token (optional) | topic name | `https://ntfy.sh` (default) |
+| Pushover | `pushover` | API token | user key | -- |
+| Telegram | `telegram` | bot token | chat ID | -- |
+
+Example (ntfy):
 
 ```bash
 python3 config/config.py --set backends.push.enabled true
 python3 config/config.py --set backends.push.service ntfy
 python3 config/config.py --set backends.push.topic my-agent-alerts
-python3 config/config.py --set backends.push.server https://ntfy.sh    # default
-python3 config/config.py --set backends.push.token ""                  # optional
 ```
 
-**Pushover**:
+Example (Pushover):
 
 ```bash
 python3 config/config.py --set backends.push.service pushover
@@ -147,7 +177,7 @@ python3 config/config.py --set backends.push.token <api-token>
 python3 config/config.py --set backends.push.topic <user-key>
 ```
 
-**Telegram**:
+Example (Telegram):
 
 ```bash
 python3 config/config.py --set backends.push.service telegram
@@ -161,10 +191,11 @@ Per-state control: `backends.push.states.needs-input` and `backends.push.states.
 
 All settings live in `~/.config/agent-indicator/config.json` (respects `XDG_CONFIG_HOME`).
 
-Created by the setup wizard or `install.sh`. Contains all keys with defaults. Example:
+Created by the setup wizard or `install.sh`. Example:
 
 ```json
 {
+  "log_level": "warn",
   "backends": {
     "terminal": {
       "enabled": "on",
@@ -172,8 +203,8 @@ Created by the setup wizard or `install.sh`. Contains all keys with defaults. Ex
       "bg_needs_input": "3b3000",
       "bg_done": "002b00"
     },
-    "sound": { "enabled": "on", "volume": 0.7, "pack": "default" },
-    "desktop": { "enabled": "on" },
+    "sound": { "enabled": "off", "volume": 0.5, "pack": "default" },
+    "desktop": { "enabled": "off" },
     "push": { "enabled": "off" }
   }
 }
@@ -191,12 +222,32 @@ python3 config/config.py --ensure                   # create/update config with 
 
 ### Backend toggles
 
+Accepted enabled values: `on`, `true`, `yes`, `1` (and their inverses for off).
+
 | Key | Default |
 |-----|---------|
 | `backends.terminal.enabled` | `on` |
 | `backends.sound.enabled` | `off` |
 | `backends.desktop.enabled` | `off` |
 | `backends.push.enabled` | `off` |
+
+### Logging and debug
+
+Set `log_level` in config.json or via environment variables. Levels: `quiet`, `error`, `warn` (default), `info`, `debug`.
+
+| Env var | Description |
+|---------|-------------|
+| `AGENT_INDICATOR_LOG_LEVEL` | Override log level (e.g. `debug`) |
+| `AGENT_INDICATOR_QUIET` | Set to `1` to suppress all log output |
+
+### Environment variables
+
+| Env var | Description |
+|---------|-------------|
+| `AGENT_INDICATOR_DIR` | Override install path used in hooks |
+| `AGENT_INDICATOR_INSTALL_DIR` | Alternative to `--target-dir` flag for installer |
+| `AGENT_INDICATOR_INSTALL_REPO` | Point curl installer at a fork (default: `accessd/agent-indicator`) |
+| `AGENT_INDICATOR_INSTALL_REF` | Point curl installer at a branch (default: `main`) |
 
 ## Sound packs
 
@@ -282,6 +333,18 @@ Manual install (if not using the installer):
 ```bash
 cp plugins/opencode-agent-indicator.js ~/.config/opencode/plugins/
 ```
+
+## Troubleshooting
+
+**Background color not changing**: Terminal.app does not support OSC 11. Use iTerm2, Kitty, WezTerm, Ghostty, or another terminal from the compatibility table.
+
+**Sound not playing**: Check that an audio player is available. Run `which afplay paplay aplay play` to see what you have. At least one is required for the sound backend.
+
+**Hooks not firing in Claude Code**: Verify that `~/.claude/settings.json` contains agent-indicator hook entries. Re-run the setup wizard or check the reference template in `hooks/claude-hooks.json`.
+
+**python3 not found**: The config system and setup wizard require python3. Install it via your package manager. Without python3, `agent-state.sh` still runs but uses hardcoded defaults.
+
+**Debugging**: Set `log_level` to `debug` in config.json or run with `AGENT_INDICATOR_LOG_LEVEL=debug` to see detailed output on stderr.
 
 ## Project structure
 
