@@ -131,30 +131,39 @@ _play_file() {
     fi
 
     if command -v afplay >/dev/null 2>&1; then
+        # macOS: afplay is the only player, no fallback needed
         if [ -n "$volume" ]; then
             afplay -v "$volume" "$file" &
         else
             afplay "$file" &
         fi
-    elif command -v paplay >/dev/null 2>&1; then
-        if [ -n "$volume" ]; then
-            # paplay volume is 0-65536 (100% = 65536)
-            local pavol
-            pavol=$(printf '%.0f' "$(echo "$volume * 65536" | bc 2>/dev/null || echo 65536)")
-            paplay --volume="$pavol" "$file" &
-        else
-            paplay "$file" &
-        fi
-    elif command -v aplay >/dev/null 2>&1; then
-        aplay -q "$file" &
-    elif command -v play >/dev/null 2>&1; then
-        if [ -n "$volume" ]; then
-            play -q -v "$volume" "$file" &
-        else
-            play -q "$file" &
-        fi
     else
-        return
+        # Linux/other: try players in order, fall through on failure.
+        # Runs in a subshell so that if e.g. paplay fails (PulseAudio not
+        # running), we automatically try aplay, then play (SoX).
+        local pavol=""
+        if [ -n "$volume" ] && command -v bc >/dev/null 2>&1; then
+            pavol=$(printf '%.0f' "$(echo "$volume * 65536" | bc)")
+        fi
+        (
+            if command -v paplay >/dev/null 2>&1; then
+                if [ -n "$pavol" ]; then
+                    paplay --volume="$pavol" "$file" && exit 0
+                else
+                    paplay "$file" && exit 0
+                fi
+            fi
+            if command -v aplay >/dev/null 2>&1; then
+                aplay -q "$file" && exit 0
+            fi
+            if command -v play >/dev/null 2>&1; then
+                if [ -n "$volume" ]; then
+                    play -q -v "$volume" "$file" && exit 0
+                else
+                    play -q "$file" && exit 0
+                fi
+            fi
+        ) 2>/dev/null &
     fi
     disown 2>/dev/null || true
 }
