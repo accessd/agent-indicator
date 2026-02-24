@@ -2,6 +2,11 @@
 
 Visual and audio indicators for AI agent state. Shows running, needs-input, done, and off states through four backends: terminal escape sequences, sound alerts, desktop notifications, and push notifications.
 
+
+https://github.com/user-attachments/assets/42aeb041-8ea9-407d-8d4e-26616b1b8cb9
+<img width="2642" height="1492" alt="Screenshot 2026-02-24 at 21 03 34" src="https://github.com/user-attachments/assets/8d17fd75-d976-4e3d-88d9-be681a8e0e72" />
+
+
 Built for Claude Code, Codex, and OpenCode. Works with any agent that can call a shell script.
 
 ## How it works
