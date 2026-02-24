@@ -2,13 +2,14 @@
 """Config reader/writer for agent-indicator.
 
 Reads ~/.config/agent-indicator/config.json (or XDG_CONFIG_HOME equivalent),
-merges with defaults, supports get/set/shell-exports operations.
+merges with defaults. Config.json is the single source of truth.
 
 Usage:
     config.py --get <dotpath>                   # e.g. backends.sound.volume
     config.py --set <dotpath> <value>           # e.g. backends.sound.volume 0.5
     config.py --shell-exports                   # output env vars for bash eval
     config.py --dump                            # print merged config as JSON
+    config.py --ensure                          # create/update config with all defaults
 """
 
 import json
@@ -91,19 +92,22 @@ def save_config(cfg):
 
 # ---------------------------------------------------------------------------
 # Shell exports: flatten config to AGENT_INDICATOR_* env vars.
-# Only exports values not already set in the environment, so explicit
-# env vars always win over config file values.
+# Always exports from config file. Config.json is the single source of truth.
 # ---------------------------------------------------------------------------
 ENV_MAP = {
     "backends.terminal.enabled":              "AGENT_INDICATOR_TERMINAL",
     "backends.terminal.bg_restore_timeout":   "AGENT_INDICATOR_TERMINAL_BG_RESTORE_TIMEOUT",
     "backends.terminal.bg_needs_input":       "AGENT_INDICATOR_TERMINAL_BG_NEEDS_INPUT",
     "backends.terminal.bg_done":              "AGENT_INDICATOR_TERMINAL_BG_DONE",
+    "log_level":                          "AGENT_INDICATOR_LOG_LEVEL",
     "backends.sound.enabled":             "AGENT_INDICATOR_SOUND",
     "backends.sound.pack":                "AGENT_INDICATOR_SOUND_PACK",
     "backends.sound.volume":              "AGENT_INDICATOR_SOUND_VOLUME",
+    "backends.sound.command":             "AGENT_INDICATOR_SOUND_COMMAND",
     "backends.sound.states.needs-input":  "AGENT_INDICATOR_SOUND_STATE_NEEDS_INPUT",
     "backends.sound.states.done":         "AGENT_INDICATOR_SOUND_STATE_DONE",
+    "backends.sound.overrides.needs-input": "AGENT_INDICATOR_SOUND_NEEDS_INPUT",
+    "backends.sound.overrides.done":      "AGENT_INDICATOR_SOUND_DONE",
     "backends.desktop.enabled":           "AGENT_INDICATOR_DESKTOP",
     "backends.desktop.states.needs-input": "AGENT_INDICATOR_DESKTOP_STATE_NEEDS_INPUT",
     "backends.desktop.states.done":       "AGENT_INDICATOR_DESKTOP_STATE_DONE",
@@ -128,8 +132,6 @@ def to_shell_value(val):
 def shell_exports(cfg):
     lines = []
     for dotpath, env_key in ENV_MAP.items():
-        if env_key in os.environ:
-            continue
         val = get_by_path(cfg, dotpath)
         if val is not None:
             shell_val = to_shell_value(val)
@@ -180,13 +182,13 @@ def main():
         print(config_path())
 
     elif cmd == "--ensure":
-        # Create config file from defaults if it doesn't exist
+        # Create or update config file with full merged config (defaults + existing)
         p = config_path()
-        if not p.exists():
-            save_config({})
+        save_config(merged)
+        if not user_cfg:
             print(f"Created {p}")
         else:
-            print(f"Already exists: {p}")
+            print(f"Updated {p}")
 
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)

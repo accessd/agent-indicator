@@ -34,7 +34,6 @@ Installer flags:
 ```
 --target-dir <path>   Install location (default: ~/.local/share/agent-indicator)
 --skip-setup          Skip the interactive setup wizard after install
---headless            Non-interactive, reads config from env vars (implies --skip-setup)
 --uninstall           Remove files, config, and all integrations
 ```
 
@@ -80,13 +79,13 @@ Sets tab title, background color tint, terminal-level notifications, and bell vi
 | GNOME/VTE | OSC 2 | OSC 11 | OSC 777 |
 | Alacritty | OSC 2 | OSC 11 | OSC 9 |
 
-Terminal-specific config:
+Terminal config keys:
 
-| Env var | Default | Description |
-|---------|---------|-------------|
-| `AGENT_INDICATOR_TERMINAL_BG_NEEDS_INPUT` | `3b3000` | Hex color for needs-input background (no # prefix) |
-| `AGENT_INDICATOR_TERMINAL_BG_DONE` | `002b00` | Hex color for done background (no # prefix) |
-| `AGENT_INDICATOR_TERMINAL_BG_RESTORE_TIMEOUT` | `3` | Seconds before done bg resets. Set to `0` to keep done bg until next state change |
+| Key | Default | Description |
+|-----|---------|-------------|
+| `backends.terminal.bg_needs_input` | `3b3000` | Hex color for needs-input background (no # prefix) |
+| `backends.terminal.bg_done` | `002b00` | Hex color for done background (no # prefix) |
+| `backends.terminal.bg_restore_timeout` | `3` | Seconds before done bg resets. Set to `0` to keep done bg until next state change |
 
 ### Tmux
 
@@ -98,17 +97,17 @@ Plays audio alerts on needs-input and done states using CESP sound packs. Picks 
 
 Player fallback chain: `afplay` (macOS) -> `paplay` -> `aplay` -> `play` (SoX).
 
-Config options:
+Config keys:
 
-| Env var | Description |
-|---------|-------------|
-| `AGENT_INDICATOR_SOUND_PACK` | Pack name (default: "default") |
-| `AGENT_INDICATOR_SOUND_VOLUME` | 0.0 to 1.0 |
-| `AGENT_INDICATOR_SOUND_STATE_NEEDS_INPUT` | on/off per state |
-| `AGENT_INDICATOR_SOUND_STATE_DONE` | on/off per state |
-| `AGENT_INDICATOR_SOUND_NEEDS_INPUT` | Override: path to specific file |
-| `AGENT_INDICATOR_SOUND_DONE` | Override: path to specific file |
-| `AGENT_INDICATOR_SOUND_COMMAND` | Override: custom command (receives state as arg) |
+| Key | Default | Description |
+|-----|---------|-------------|
+| `backends.sound.pack` | `default` | Pack name |
+| `backends.sound.volume` | `0.5` | 0.0 to 1.0 |
+| `backends.sound.command` | `""` | Override: custom command (receives state as arg) |
+| `backends.sound.states.needs-input` | `true` | Play on needs-input |
+| `backends.sound.states.done` | `true` | Play on done |
+| `backends.sound.overrides.needs-input` | `""` | Override: path to specific file |
+| `backends.sound.overrides.done` | `""` | Override: path to specific file |
 
 ### Desktop notifications (default: off)
 
@@ -119,12 +118,12 @@ OS-level notification popups, separate from terminal-level notifications.
 
 Supports format templates with `{agent}` and `{state}` placeholders:
 
-| Env var | Default |
-|---------|---------|
-| `AGENT_INDICATOR_DESKTOP_TITLE_FORMAT` | `[{agent}] {state}` |
-| `AGENT_INDICATOR_DESKTOP_BODY_FORMAT` | `{agent} is {state}` |
-| `AGENT_INDICATOR_DESKTOP_STATE_NEEDS_INPUT` | on |
-| `AGENT_INDICATOR_DESKTOP_STATE_DONE` | on |
+| Key | Default |
+|-----|---------|
+| `backends.desktop.title_format` | `[{agent}] {state}` |
+| `backends.desktop.body_format` | `{agent} is {state}` |
+| `backends.desktop.states.needs-input` | `true` |
+| `backends.desktop.states.done` | `true` |
 
 ### Push notifications (default: off)
 
@@ -133,45 +132,36 @@ Sends HTTP notifications to your phone via one of three services. Requires `curl
 **ntfy** (easiest, no signup for public topics):
 
 ```bash
-AGENT_INDICATOR_PUSH=on
-AGENT_INDICATOR_PUSH_SERVICE=ntfy
-AGENT_INDICATOR_PUSH_TOPIC=my-agent-alerts
-AGENT_INDICATOR_PUSH_SERVER=https://ntfy.sh     # optional, this is the default
-AGENT_INDICATOR_PUSH_TOKEN=                      # optional, for private topics
+python3 config/config.py --set backends.push.enabled true
+python3 config/config.py --set backends.push.service ntfy
+python3 config/config.py --set backends.push.topic my-agent-alerts
+python3 config/config.py --set backends.push.server https://ntfy.sh    # default
+python3 config/config.py --set backends.push.token ""                  # optional
 ```
 
 **Pushover**:
 
 ```bash
-AGENT_INDICATOR_PUSH=on
-AGENT_INDICATOR_PUSH_SERVICE=pushover
-AGENT_INDICATOR_PUSH_TOKEN=<api-token>
-AGENT_INDICATOR_PUSH_TOPIC=<user-key>
+python3 config/config.py --set backends.push.service pushover
+python3 config/config.py --set backends.push.token <api-token>
+python3 config/config.py --set backends.push.topic <user-key>
 ```
 
 **Telegram**:
 
 ```bash
-AGENT_INDICATOR_PUSH=on
-AGENT_INDICATOR_PUSH_SERVICE=telegram
-AGENT_INDICATOR_PUSH_TOKEN=<bot-token>
-AGENT_INDICATOR_PUSH_TOPIC=<chat-id>
+python3 config/config.py --set backends.push.service telegram
+python3 config/config.py --set backends.push.token <bot-token>
+python3 config/config.py --set backends.push.topic <chat-id>
 ```
 
-Per-state control: `AGENT_INDICATOR_PUSH_STATE_NEEDS_INPUT` and `AGENT_INDICATOR_PUSH_STATE_DONE` (on/off).
+Per-state control: `backends.push.states.needs-input` and `backends.push.states.done` (true/false).
 
 ## Configuration
 
-Two ways to configure:
+All settings live in `~/.config/agent-indicator/config.json` (respects `XDG_CONFIG_HOME`).
 
-1. **Config file**: `~/.config/agent-indicator/config.json` (respects `XDG_CONFIG_HOME`)
-2. **Environment variables**: `AGENT_INDICATOR_*`
-
-Priority: env var > config.json > defaults.json
-
-### Config file
-
-Created by the setup wizard or manually. Example:
+Created by the setup wizard or `install.sh`. Contains all keys with defaults. Example:
 
 ```json
 {
@@ -192,22 +182,21 @@ Created by the setup wizard or manually. Example:
 ### config.py subcommands
 
 ```bash
-python3 config/config.py --shell-exports           # env var exports for bash eval
 python3 config/config.py --get backends.sound.volume  # read a value by dotpath
 python3 config/config.py --set backends.sound.volume 0.8  # write a value
 python3 config/config.py --dump                     # print merged config as JSON
 python3 config/config.py --config-path              # print config file location
-python3 config/config.py --ensure                   # create config file if missing
+python3 config/config.py --ensure                   # create/update config with all defaults
 ```
 
 ### Backend toggles
 
-| Env var | Default | Notes |
-|---------|---------|-------|
-| `AGENT_INDICATOR_TERMINAL` | on | |
-| `AGENT_INDICATOR_SOUND` | off | |
-| `AGENT_INDICATOR_DESKTOP` | off | |
-| `AGENT_INDICATOR_PUSH` | off | |
+| Key | Default |
+|-----|---------|
+| `backends.terminal.enabled` | `on` |
+| `backends.sound.enabled` | `off` |
+| `backends.desktop.enabled` | `off` |
+| `backends.push.enabled` | `off` |
 
 ## Sound packs
 
@@ -235,12 +224,6 @@ Manifest structure:
 Entries can reference system sounds by name (`{ "system": "Funk" }`) or bundled audio files relative to the pack directory (`{ "file": "alert.wav" }`). The player picks randomly from available sounds per state.
 
 To use a custom pack:
-
-```bash
-AGENT_INDICATOR_SOUND_PACK=my-pack ./agent-state.sh --state needs-input
-```
-
-Or set it in config:
 
 ```bash
 python3 config/config.py --set backends.sound.pack my-pack
@@ -299,8 +282,6 @@ Manual install (if not using the installer):
 ```bash
 cp plugins/opencode-agent-indicator.js ~/.config/opencode/plugins/
 ```
-
-Override the install path via `AGENT_INDICATOR_DIR` env var if agent-indicator is not at the default location.
 
 ## Project structure
 

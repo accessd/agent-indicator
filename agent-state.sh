@@ -10,11 +10,8 @@ usage() {
     cat <<'EOF' >&2
 Usage: agent-state.sh --state <running|needs-input|done|off> [--agent <name>] [--tty /dev/ttysXXX]
 
-Backends (configure via ~/.config/agent-indicator/config.json or env vars):
-  AGENT_INDICATOR_TERMINAL=on|off   Terminal escape sequences (default: on)
-  AGENT_INDICATOR_SOUND=on|off      Audio alerts (default: off)
-  AGENT_INDICATOR_DESKTOP=on|off    Desktop notifications (default: off)
-  AGENT_INDICATOR_PUSH=on|off       Push notifications (default: off)
+Configure backends via ~/.config/agent-indicator/config.json
+Run setup.sh to configure interactively, or edit config.json directly.
 
 For tmux styling, use tmux-agent-indicator plugin:
   https://github.com/accessd/tmux-agent-indicator
@@ -71,7 +68,7 @@ esac
 
 # ---------------------------------------------------------------------------
 # Load config (if python3 available and config system exists)
-# Env vars set directly by the user take priority over config.json values.
+# Config.json is the single source of truth for all settings.
 # ---------------------------------------------------------------------------
 CONFIG_PY="$SCRIPT_DIR/config/config.py"
 if command -v python3 >/dev/null 2>&1 && [ -f "$CONFIG_PY" ]; then

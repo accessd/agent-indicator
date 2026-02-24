@@ -11,9 +11,14 @@
       "enabled": "off",
       "pack": "default",
       "volume": 0.5,
+      "command": "",
       "states": {
         "needs-input": true,
         "done": true
+      },
+      "overrides": {
+        "needs-input": "",
+        "done": ""
       }
     },
     "desktop": {

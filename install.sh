@@ -51,7 +51,6 @@ fi
 
 TARGET_DIR="${AGENT_INDICATOR_INSTALL_DIR:-$HOME/.local/share/agent-indicator}"
 UNINSTALL_MODE=false
-HEADLESS=false
 SKIP_SETUP=false
 
 usage() {
@@ -61,7 +60,6 @@ Usage: install.sh [OPTIONS]
 Options:
   --target-dir <path>   Install path (default: ~/.local/share/agent-indicator)
   --uninstall           Remove agent-indicator files and hooks
-  --headless            Non-interactive install (use env vars for config)
   --skip-setup          Skip interactive setup wizard after install
   -h, --help            Show this help
 EOF
@@ -76,11 +74,6 @@ while [ "$#" -gt 0 ]; do
             ;;
         --uninstall)
             UNINSTALL_MODE=true
-            shift
-            ;;
-        --headless)
-            HEADLESS=true
-            SKIP_SETUP=true
             shift
             ;;
         --skip-setup)
@@ -207,32 +200,10 @@ chmod +x "$TARGET_DIR/agent-state.sh"
 echo "Installed agent-indicator to: $TARGET_DIR"
 
 # ---------------------------------------------------------------------------
-# Headless config from env vars
+# Ensure full config file exists with all defaults
 # ---------------------------------------------------------------------------
-if [ "$HEADLESS" = true ] && command -v python3 >/dev/null 2>&1; then
-    CONFIG_PY="$TARGET_DIR/config/config.py"
-    # Write config values from env vars if set
-    _set_if() {
-        local env_var="$1" config_path="$2"
-        local val="${!env_var:-}"
-        if [ -n "$val" ]; then
-            python3 "$CONFIG_PY" --set "$config_path" "$val"
-        fi
-    }
-    _set_if AGENT_INDICATOR_TERMINAL "backends.terminal.enabled"
-    _set_if AGENT_INDICATOR_TERMINAL_BG_RESTORE_TIMEOUT "backends.terminal.bg_restore_timeout"
-    _set_if AGENT_INDICATOR_TERMINAL_BG_NEEDS_INPUT "backends.terminal.bg_needs_input"
-    _set_if AGENT_INDICATOR_TERMINAL_BG_DONE "backends.terminal.bg_done"
-    _set_if AGENT_INDICATOR_SOUND "backends.sound.enabled"
-    _set_if AGENT_INDICATOR_SOUND_PACK "backends.sound.pack"
-    _set_if AGENT_INDICATOR_SOUND_VOLUME "backends.sound.volume"
-    _set_if AGENT_INDICATOR_DESKTOP "backends.desktop.enabled"
-    _set_if AGENT_INDICATOR_PUSH "backends.push.enabled"
-    _set_if AGENT_INDICATOR_PUSH_SERVICE "backends.push.service"
-    _set_if AGENT_INDICATOR_PUSH_TOPIC "backends.push.topic"
-    _set_if AGENT_INDICATOR_PUSH_SERVER "backends.push.server"
-    _set_if AGENT_INDICATOR_PUSH_TOKEN "backends.push.token"
-    echo "Config written from environment variables."
+if command -v python3 >/dev/null 2>&1; then
+    python3 "$TARGET_DIR/config/config.py" --ensure >/dev/null 2>&1 || true
 fi
 
 # ---------------------------------------------------------------------------
@@ -248,11 +219,8 @@ cat <<EOF
 Run the setup wizard to configure backends and agent integrations:
   $TARGET_DIR/setup.sh
 
-Env var overrides still work:
-  export AGENT_INDICATOR_TERMINAL=on   # tab title, bg color, notifications (default: on)
-  export AGENT_INDICATOR_SOUND=on      # audio alerts (default: off)
-  export AGENT_INDICATOR_DESKTOP=on    # desktop notifications (default: off)
-  export AGENT_INDICATOR_PUSH=on       # push notifications (default: off)
+Edit config directly:
+  \$(python3 "$TARGET_DIR/config/config.py" --config-path)
 
 For tmux styling, use tmux-agent-indicator:
   https://github.com/accessd/tmux-agent-indicator

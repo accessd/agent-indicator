@@ -17,7 +17,7 @@ source "$SCRIPT_DIR/lib/platform.sh"
 CONFIG_PY="$SCRIPT_DIR/config/config.py"
 if ! command -v python3 >/dev/null 2>&1; then
     echo "python3 is required for the setup wizard." >&2
-    echo "You can still configure agent-indicator with env vars. See README.md." >&2
+    echo "You can edit config.json directly. See README.md." >&2
     exit 1
 fi
 
@@ -325,7 +325,7 @@ for event in list(hooks.keys()):
     cleaned = []
     for entry in entries:
         hook_items = entry.get("hooks", [])
-        filtered = [h for h in hook_items if not ("agent-state.sh" in h.get("command", "") and "agent-indicator" in h.get("command", ""))]
+        filtered = [h for h in hook_items if not ("agent-state.sh" in h.get("command", "") and "agent-indicator" in h.get("command", "") and "tmux-agent-indicator" not in h.get("command", ""))]
         if hook_items and not filtered:
             continue
         if filtered != hook_items:
@@ -468,6 +468,8 @@ main() {
     setup_hooks
     setup_codex
     setup_opencode
+    # Fill any missing keys from new defaults into config
+    python3 "$CONFIG_PY" --ensure >/dev/null 2>&1
     setup_test
     setup_summary
 }

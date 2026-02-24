@@ -19,10 +19,11 @@ Provides visual/audio indicators for AI agent state (running, needs-input, done,
 
 Use `--tty /dev/ttysXXX` to target a specific terminal. Use `--agent <name>` for desktop/push tracking.
 
-Enable backends for testing:
+Enable backends for testing (edit config.json or use config.py):
 ```bash
-AGENT_INDICATOR_SOUND=on ./agent-state.sh --state needs-input
-AGENT_INDICATOR_DESKTOP=on ./agent-state.sh --state done
+python3 config/config.py --set backends.sound.enabled true
+python3 config/config.py --set backends.desktop.enabled true
+./agent-state.sh --state needs-input
 ```
 
 ## Architecture
@@ -54,7 +55,7 @@ agent-state.sh                    # entry point, dispatcher
 ### Dispatcher flow
 
 `agent-state.sh` is the entry point. It:
-1. Loads config via `config.py --shell-exports` (if python3 available). This converts `config.json` to env vars. Env vars set by the user take priority over config file values.
+1. Loads config via `config.py --shell-exports` (if python3 available). This converts `config.json` to env vars. Config.json is the single source of truth.
 2. Sources `lib/log.sh` and `lib/platform.sh`
 3. Parses args and resolves the target TTY
 4. Writes state to a temp file keyed by TTY slug
@@ -65,14 +66,14 @@ agent-state.sh                    # entry point, dispatcher
 Config file: `~/.config/agent-indicator/config.json` (respects `XDG_CONFIG_HOME`).
 
 `config/config.py` handles read/merge/write:
-- `--shell-exports`: outputs env var exports for bash eval (only for vars not already in env)
+- `--shell-exports`: outputs env var exports for bash eval (always from config file)
 - `--get <dotpath>`: read a value (e.g. `backends.sound.volume`)
 - `--set <dotpath> <value>`: write a value
 - `--dump`: print merged config as JSON
 - `--config-path`: print config file location
-- `--ensure`: create config file if missing
+- `--ensure`: create/update config file with all defaults merged in
 
-Priority: env var > config.json > defaults.json
+Priority: config.json > defaults.json
 
 ### Backend interface
 
@@ -88,11 +89,11 @@ Every backend exposes one public function:
 
 ### Backend activation
 
-Controlled by env vars or config.json:
-- `AGENT_INDICATOR_TERMINAL` (default: on)
-- `AGENT_INDICATOR_SOUND` (default: off)
-- `AGENT_INDICATOR_DESKTOP` (default: off)
-- `AGENT_INDICATOR_PUSH` (default: off)
+Controlled by config.json:
+- `backends.terminal.enabled` (default: on)
+- `backends.sound.enabled` (default: off)
+- `backends.desktop.enabled` (default: off)
+- `backends.push.enabled` (default: off)
 
 ### Sound packs
 
@@ -106,7 +107,6 @@ Sound packs use CESP v1.0 format. Each pack has an `openpeon.json` manifest list
 
 Flags:
 - `--skip-setup`: skip the interactive setup wizard
-- `--headless`: non-interactive, reads config from env vars (implies `--skip-setup`)
 - `--uninstall`: removes files, config, and all integrations
 
 Agent integrations (Claude hooks, Codex config, OpenCode plugin) are configured by `setup.sh`, not the installer itself.
